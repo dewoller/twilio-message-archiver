@@ -1,0 +1,23 @@
+{
+  "name": "twilio-message-archiver",
+  "version": "1.0.0",
+  "description": "Archives terminal-state Twilio messages (and MMS media) to monthly CSVs, then deletes them from Twilio. Includes a loopback browser GUI for manual cleanup.",
+  "license": "MIT",
+  "author": "Dennis Wollersheim",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dewoller/twilio-message-archiver.git"
+  },
+  "type": "module",
+  "scripts": {
+    "test": "bun test",
+    "start": "bun run src/cli.ts",
+    "build:win": "bun build ./src/cli.ts --compile --target=bun-windows-x64 --outfile dist/twilio-archiver.exe",
+    "start:viewer": "bun run src/server.ts",
+    "build:viewer:win": "bun build ./src/server.ts --compile --target=bun-windows-x64 --outfile dist/twilio-viewer.exe",
+    "build:viewer:mac": "bun build ./src/server.ts --compile --target=bun-darwin-arm64 --outfile dist/twilio-viewer"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.14"
+  }
+}

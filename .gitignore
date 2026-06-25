@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.template
+.DS_Store
+processed_sids.log
