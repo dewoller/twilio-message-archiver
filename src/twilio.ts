@@ -28,7 +28,7 @@ export interface TwilioClient {
   listAllMessages(): Promise<TwilioMessage[]>;
   listMedia(message: TwilioMessage): Promise<MediaItem[]>;
   downloadMedia(item: MediaItem): Promise<{ bytes: Uint8Array; contentType: string }>;
-  deleteMessage(sid: string): Promise<"deleted" | "not_found">;
+  deleteMessage(sid: string): Promise<"deleted" | "not_found" | "pending">;
 }
 
 const EXT_MAP: Record<string, string> = {
@@ -82,12 +82,20 @@ export function createTwilioClient(config: Config, fetchFn: typeof fetch = fetch
     return { bytes, contentType };
   }
 
-  async function deleteMessage(sid: string): Promise<"deleted" | "not_found"> {
+  async function deleteMessage(sid: string): Promise<"deleted" | "not_found" | "pending"> {
     const url = `${config.apiBase}/2010-04-01/Accounts/${config.accountSid}/Messages/${sid}.json`;
     const res = await fetchFn(url, { method: "DELETE", headers });
     if (res.status === 204) return "deleted";
     if (res.status === 404) return "not_found";
-    throw new Error(`delete failed for ${sid}: ${res.status} ${await res.text()}`);
+    const text = await res.text();
+    // 409 / 20009: Twilio still considers a "sent" message in delivery and refuses
+    // the delete. Not an error: the caller retries on a later run.
+    if (res.status === 409) {
+      let code: unknown;
+      try { code = JSON.parse(text).code; } catch { /* not JSON: fall through to throw */ }
+      if (code === 20009) return "pending";
+    }
+    throw new Error(`delete failed for ${sid}: ${res.status} ${text}`);
   }
 
   return { listAllMessages, listMedia, downloadMedia, deleteMessage };

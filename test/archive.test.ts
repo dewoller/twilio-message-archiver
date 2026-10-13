@@ -58,13 +58,47 @@ test("skips in-flight (non-terminal) messages entirely", async () => {
   expect(existsSync(join(dir, "messages_2026-06.csv"))).toBe(false);
 });
 
-test("dedupes against the ledger and does not re-delete", async () => {
+test("dedupes against the ledger: no re-archive, but retries the delete of a message still on Twilio", async () => {
   const store = new Store(dir); store.ensureDirs();
   store.recordSid("SM1");
   const client = fakeClient([msg({ sid: "SM1", status: "delivered" })]);
   const r = await archive(client, store, opts(false));
   expect(r.skippedDuplicate).toBe(1);
+  expect(r.archived).toBe(0);
+  expect(r.deleted).toBe(1);
+  expect(client.deleted).toEqual(["SM1"]);
+  expect(existsSync(join(dir, "messages_2026-06.csv"))).toBe(false);
+});
+
+test("dry-run does not retry deletes for ledger duplicates", async () => {
+  const store = new Store(dir); store.ensureDirs();
+  store.recordSid("SM1");
+  const client = fakeClient([msg({ sid: "SM1", status: "delivered" })]);
+  const r = await archive(client, store, opts(true));
+  expect(r.skippedDuplicate).toBe(1);
   expect(client.deleted).toEqual([]);
+});
+
+test("a delete Twilio refuses as pending (409/20009) keeps the run going and is retried next run", async () => {
+  const pendingOnce = new Set(["SM1"]);
+  const deleted: string[] = [];
+  const client = fakeClient([msg({ sid: "SM1", status: "sent" }), msg({ sid: "SM2", status: "delivered" })], {
+    deleteMessage: async (sid: string) => {
+      if (pendingOnce.delete(sid)) return "pending";
+      deleted.push(sid); return "deleted";
+    },
+  });
+  const store = new Store(dir); store.ensureDirs();
+  const r1 = await archive(client, store, opts(false));
+  expect(r1.archived).toBe(2);
+  expect(r1.deleted).toBe(1);
+  expect(deleted).toEqual(["SM2"]);
+  const r2 = await archive(fakeClient([msg({ sid: "SM1", status: "delivered" })], { deleteMessage: client.deleteMessage }), store, opts(false));
+  expect(r2.archived).toBe(0);
+  expect(r2.deleted).toBe(1);
+  expect(deleted).toEqual(["SM2", "SM1"]);
+  const csv = readFileSync(join(dir, "messages_2026-06.csv"), "utf8");
+  expect(csv.split("\n").filter((l) => l.startsWith("SM1,")).length).toBe(1);
 });
 
 test("downloads media before delete and records relative paths", async () => {
