@@ -66,6 +66,18 @@ test("deleteMessage returns 'deleted' on 204 and 'not_found' on 404", async () =
   expect(await make(404).deleteMessage("SM1")).toBe("not_found");
 });
 
+test("deleteMessage returns 'pending' on 409 code 20009 (delivery not completed)", async () => {
+  const body = JSON.stringify({ code: 20009, message: "Cannot delete message because delivery has not been completed.", status: 409 });
+  const client = createTwilioClient(config, (async () => new Response(body, { status: 409 })) as unknown as typeof fetch);
+  expect(await client.deleteMessage("SM1")).toBe("pending");
+});
+
+test("deleteMessage still throws on a 409 with a different code", async () => {
+  const body = JSON.stringify({ code: 20001, message: "other", status: 409 });
+  const client = createTwilioClient(config, (async () => new Response(body, { status: 409 })) as unknown as typeof fetch);
+  await expect(client.deleteMessage("SM1")).rejects.toThrow(/409/);
+});
+
 test("deleteMessage throws on unexpected status", async () => {
   const client = createTwilioClient(config, (async () => new Response("boom", { status: 500 })) as unknown as typeof fetch);
   await expect(client.deleteMessage("SM1")).rejects.toThrow(/500/);

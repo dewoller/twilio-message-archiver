@@ -134,7 +134,13 @@ export async function archive(
   for (const m of messages) {
     if (!TERMINAL.has(m.status)) { r.skippedInflight++; continue; }
     r.terminal++;
-    if (ledger.has(m.sid)) { r.skippedDuplicate++; continue; }
+    if (ledger.has(m.sid)) {
+      r.skippedDuplicate++;
+      // Already archived but still listed on Twilio, so an earlier delete did not
+      // land (e.g. 409 "delivery not completed"). Retry the delete only.
+      if (!opts.dryRun && await client.deleteMessage(m.sid) !== "pending") r.deleted++;
+      continue;
+    }
 
     if (opts.dryRun) {
       opts.log(`DRYRUN would archive+delete ${m.sid} (${m.direction}, ${m.status}, media=${m.num_media})`);
